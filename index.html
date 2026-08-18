@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MEB Aydın İl İstatistik Asistanı</title>
+
+  <!-- Güvenlik başlıkları -->
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="Permissions-Policy" content="geolocation=(), microphone=(), camera=()" />
+  <!-- CSP: sadece tanımlı kaynaklardan script/style/font/bağlantıya izin ver -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://unpkg.com https://generativelanguage.googleapis.com https://cdnjs.cloudflare.com;
+    style-src  'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com;
+    font-src   'self' https://fonts.gstatic.com;
+    img-src    'self' data: https://*.tile.openstreetmap.org;
+    connect-src 'self' https://generativelanguage.googleapis.com;
+    worker-src 'self' blob:;
+    frame-ancestors 'none';
+  " />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- Leaflet — SRI hash ile doğrulanmış -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" crossorigin="anonymous"></script>
+
+  <!-- Belge Okuma ve Ayrıştırma Kütüphaneleri -->
+  <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script>
+    // PDF.js worker yolunu ayarla
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+  </script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Mobile Header -->
+    <header class="mobile-nav">
+      <button id="menuToggle" class="menu-btn" onclick="toggleSidebar()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+      <div class="mobile-logo">
+        <img src="meb_logo.png" alt="MEB Logo" height="32">
+        <span>MEB Aydın</span>
+      </div>
+      <div style="width: 40px;"></div>
+    </header>
+
+    <!-- Overlay for mobile sidebar -->
+    <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-area">
+          <img src="meb_logo.png" alt="MEB Logo" class="logo-img">
+          <div>
+            <div class="logo-title">MEB Aydın</div>
+            <div class="logo-sub">İstatistik Asistanı</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="sidebar-section">
+        <div class="section-label">Modüller</div>
+        <div class="nav-tabs">
+          <button class="nav-tab active" data-tab="chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>✨ AI Asistanı</span>
+          </button>
+          <button class="nav-tab" data-tab="heatmap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M12 8v4l3 3"></path>
+            </svg>
+            <span>🗺️ Yoğunluk Haritası</span>
+          </button>
+          <button class="nav-tab" data-tab="comparison">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            <span>⚖️ İlçe Karşılaştırma</span>
+          </button>
+          <button class="nav-tab" data-tab="exam">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+            <span>📊 Sınav Sonuçları</span>
+          </button>
+          <button class="nav-tab" data-tab="analysis">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            <span>Okul Yapımı Analizi</span>
+          </button>
+          <button class="nav-tab" data-tab="emergency">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            <span>Acil Durum Planı</span>
+          </button>
+          <button class="nav-tab" data-tab="video">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <polygon points="23 7 16 12 23 17 23 7"></polygon>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+            </svg>
+            <span>Eğitim Animasyonları</span>
+          </button>
+          <button class="nav-tab" data-tab="studentquery">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <span>🎓 Okul Sorgula</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="chatFiltersBox">
+        <div class="sidebar-section">
+          <div class="section-label">Yıl Seçimi</div>
+          <div class="year-buttons" id="yearButtons">
+            <button class="year-btn active" data-year="2021-2022">2021-2022</button>
+            <button class="year-btn" data-year="2020-2021">2020-2021</button>
+            <button class="year-btn" data-year="all">Tüm Yıllar</button>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-label">📁 Belge ve Veri Yönetimi</div>
+          
+          <!-- Sürükle-Bırak Yükleme Alanı -->
+          <div class="file-upload-zone" id="fileUploadZone">
+            <div class="upload-icon">📥</div>
+            <div class="upload-text">Dosya Sürükle veya Seç</div>
+            <div class="upload-hint">Excel, Word, PDF, CSV</div>
+            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.docx,.pdf" style="display:none;" multiple />
+          </div>
+
+          <!-- Hata Gösterim Alanı (Görsel Debug) -->
+          <div id="uploadErrorDisplay" style="display:none; color:#f87171; font-size:11px; margin-top:8px; padding:8px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); border-radius:6px; word-break:break-all; text-align:left;"></div>
+
+          <!-- Şablon Excel İndir -->
+          <button class="download-template-btn" onclick="downloadExcelTemplate()">
+            📊 Örnek Excel Şablonu İndir
+          </button>
+
+          <!-- Yüklenen Belgeler Listesi -->
+          <div class="uploaded-files-title">Yüklenen Belgeler</div>
+          <div class="uploaded-files-list" id="uploadedFilesList">
+            <div class="no-files-yet">Henüz belge yüklenmedi.</div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-label">Hızlı Sorgular</div>
+          <div class="quick-queries" id="quickQueries">
+            <button class="quick-btn" data-query="Toplam okul sayısı kaç?">📊 Toplam okul sayısı</button>
+            <button class="quick-btn" data-query="Toplam öğrenci sayısı kaç?">👨‍🎓 Toplam öğrenci sayısı</button>
+            <button class="quick-btn" data-query="Toplam öğretmen sayısı kaç?">👩‍🏫 Toplam öğretmen sayısı</button>
+            <button class="quick-btn" data-query="İlkokul sayısı kaç?">🏫 İlkokul sayısı</button>
+            <button class="quick-btn" data-query="Ortaokul sayısı kaç?">🏛️ Ortaokul sayısı</button>
+            <button class="quick-btn" data-query="Lise sayısı kaç?">🎓 Lise sayısı</button>
+            <button class="quick-btn" data-query="Okul öncesi bilgileri ver">🧒 Okul Öncesi</button>
+            <button class="quick-btn" data-query="Nazilli ilçesi hakkında bilgi ver">📍 Nazilli İlçesi</button>
+            <button class="quick-btn" data-query="Kuşadası ilçesi hakkında bilgi ver">📍 Kuşadası İlçesi</button>
+            <button class="quick-btn" data-query="Tüm ilçeler listesi">🗺️ İlçeler listesi</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="footer-info">
+          <span>📅 2021-2022 & 2020-2021</span>
+          <span>📍 Aydın İl MEM</span>
+        </div>
+        <div class="ai-footer-badge">
+          <span>✨ Gemini AI Aktif</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+      <!-- Header -->
+      <header class="main-header">
+        <div class="header-left">
+          <h1>Aydın Milli Eğitim Müdürlüğü</h1>
+          <p>İstatistik Bilgi Sistemi — Yapay Zeka Destekli</p>
+        </div>
+        <div class="header-right">
+          <div class="ai-mode-badge active" id="aiModeBadge">✨ Gemini AI Aktif</div>
+          <button class="ai-toggle-btn off" id="aiModeToggleBtn" onclick="toggleAIMode()">AI Kapat</button>
+          <div class="status-badge" id="statusBadge">
+            <span class="status-dot"></span>
+            <span id="selectedYearLabel">2021-2022</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- ===== CHAT AREA ===== -->
+      <div class="chat-area active" id="chatArea">
+        <div class="welcome-card">
+          <div class="welcome-icon">✨</div>
+          <h2>Merhaba! Ben MEB AI Asistanı</h2>
+          <p>Aydın İl Milli Eğitim Müdürlüğü istatistiklerini, <strong>Google Gemini AI</strong> destekli akıllı analiz sistemiyle sorgulayın.</p>
+          <div class="welcome-examples">
+            <div class="example-chip" onclick="sendExample(this)">Toplam öğrenci sayısı kaç?</div>
+            <div class="example-chip" onclick="sendExample(this)">Nazilli'deki ilkokul sayısı?</div>
+            <div class="example-chip" onclick="sendExample(this)">Efeler ile Nazilli'yi karşılaştır</div>
+            <div class="example-chip" onclick="sendExample(this)">Özel okul sayısı kaç?</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== HEATMAP AREA ===== -->
+      <div class="heatmap-area" id="heatmapArea">
+        <div class="module-header">
+          <div>
+            <h2>🗺️ Öğrenci/Öğretmen Yoğunluk Haritası</h2>
+            <p>İlçe bazlı eğitim yoğunluğunu ısı haritasıyla inceleyin. İşaretçilere tıklayarak detay görün.</p>
+          </div>
+          <div class="heatmap-controls">
+            <div class="form-group">
+              <label>Metrik</label>
+              <select id="heatMetricSelect" onchange="updateHeatmap()">
+                <option value="ogrenci">👨‍🎓 Öğrenci Sayısı</option>
+                <option value="ogretmen">👩‍🏫 Öğretmen Sayısı</option>
+                <option value="derslik">🚪 Derslik Sayısı</option>
+                <option value="okul">🏫 Okul Sayısı</option>
+                <option value="ogretmen_basi">📊 Öğrenci/Öğretmen</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Yıl</label>
+              <select id="heatYearSelect" onchange="updateHeatmap()">
+                <option value="2021-2022">2021-2022</option>
+                <option value="2020-2021">2020-2021</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="heatmap-layout">
+          <div class="heatmap-map-wrap">
+            <div class="heatmap-title-bar">
+              <span id="heatmapTitle">Öğrenci Yoğunluğu</span>
+              <div class="heatmap-legend">
+                <span class="legend-item" style="background: linear-gradient(90deg,#0d47a1,#e65100,#b71c1c);">Düşük → Yüksek</span>
+              </div>
+            </div>
+            <div id="heatmapCanvas"></div>
+          </div>
+          <div class="heatmap-ranking">
+            <h3>📈 İlçe Sıralaması</h3>
+            <div id="heatRankingTable"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== COMPARISON AREA ===== -->
+      <div class="comparison-area" id="comparisonArea">
+        <div class="module-header">
+          <div>
+            <h2>⚖️ İlçe Karşılaştırma Analizi</h2>
+            <p>İki ilçeyi yan yana karşılaştırın. Kazanan her metrikte 🏆 ile işaretlenir.</p>
+          </div>
+        </div>
+
+        <div class="comparison-form-bar">
+          <div class="form-group">
+            <label>1. İlçe</label>
+            <select id="compareIlce1">
+              <option value="EFELER">Efeler (Merkez)</option>
+              <option value="NAZİLLİ">Nazilli</option>
+              <option value="SÖKE">Söke</option>
+              <option value="KUŞADASI">Kuşadası</option>
+              <option value="DİDİM">Didim</option>
+              <option value="ÇİNE">Çine</option>
+              <option value="GERMENCİK">Germencik</option>
+              <option value="BOZDOĞAN">Bozdoğan</option>
+              <option value="İNCİRLİOVA">İncirliova</option>
+              <option value="KOÇARLI">Koçarlı</option>
+              <option value="KÖŞK">Köşk</option>
+              <option value="KUYUCAK">Kuyucak</option>
+              <option value="SULTANHİSAR">Sultanhisar</option>
+              <option value="YENİPAZAR">Yenipazar</option>
+              <option value="KARACASU">Karacasu</option>
+              <option value="BUHARKENT">Buharkent</option>
+              <option value="KARPUZLU">Karpuzlu</option>
+            </select>
+          </div>
+          <div class="compare-vs">VS</div>
+          <div class="form-group">
+            <label>2. İlçe</label>
+            <select id="compareIlce2">
+              <option value="NAZİLLİ">Nazilli</option>
+              <option value="EFELER">Efeler (Merkez)</option>
+              <option value="SÖKE">Söke</option>
+              <option value="KUŞADASI">Kuşadası</option>
+              <option value="DİDİM">Didim</option>
+              <option value="ÇİNE">Çine</option>
+              <option value="GERMENCİK">Germencik</option>
+              <option value="BOZDOĞAN">Bozdoğan</option>
+              <option value="İNCİRLİOVA">İncirliova</option>
+              <option value="KOÇARLI">Koçarlı</option>
+              <option value="KÖŞK">Köşk</option>
+              <option value="KUYUCAK">Kuyucak</option>
+              <option value="SULTANHİSAR">Sultanhisar</option>
+              <option value="YENİPAZAR">Yenipazar</option>
+              <option value="KARACASU">Karacasu</option>
+              <option value="BUHARKENT">Buharkent</option>
+              <option value="KARPUZLU">Karpuzlu</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Yıl</label>
+            <select id="compareYear">
+              <option value="2021-2022">2021-2022</option>
+              <option value="2020-2021">2020-2021</option>
+            </select>
+          </div>
+          <button class="analyze-btn big-btn" onclick="runComparison()">⚖️ Karşılaştır</button>
+        </div>
+
+        <div id="comparisonResult">
+          <div class="analysis-placeholder">
+            ⚖️ İki ilçe seçerek karşılaştırmayı başlatın.
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== EXAM AREA ===== -->
+      <div class="exam-area" id="examArea">
+        <div class="module-header">
+          <div>
+            <h2>📊 LGS & ÖSYM Sınav Sonuçları</h2>
+            <p>İlçe bazlı sınav performansı, ders bazlı karşılaştırma ve en başarılı okullar.</p>
+          </div>
+          <div class="exam-controls">
+            <div class="form-group">
+              <label>Yıl</label>
+              <select id="examYearSelect" onchange="refreshExamModule()">
+                <option value="2022-2023">2022-2023</option>
+                <option value="2021-2022">2021-2022</option>
+              </select>
+            </div>
+            <div class="exam-disclaimer-badge">⚠️ Temsili Veri</div>
+          </div>
+        </div>
+
+        <div id="examOverview"></div>
+
+        <div class="exam-subject-btns">
+          <span style="font-size:13px; color:var(--text-dim); margin-right:8px;">Ders Analizi:</span>
+          <button class="subject-btn active" id="subjectBtn_matematik" data-subject="matematik" onclick="selectExamSubject('matematik')">📐 Matematik</button>
+          <button class="subject-btn" id="subjectBtn_turkce" data-subject="turkce" onclick="selectExamSubject('turkce')">📝 Türkçe</button>
+          <button class="subject-btn" id="subjectBtn_fen" data-subject="fen" onclick="selectExamSubject('fen')">🔬 Fen Bilimleri</button>
+          <button class="subject-btn" id="subjectBtn_sosyal" data-subject="sosyal" onclick="selectExamSubject('sosyal')">🌍 Sosyal Bilgiler</button>
+        </div>
+
+        <div id="examSubjectBars"></div>
+        <div id="examRanking"></div>
+        <div id="examTopSchools"></div>
+      </div>
+
+      <!-- ===== ANALYSIS AREA ===== -->
+      <div class="analysis-area" id="analysisArea">
+        <div class="analysis-header">
+          <div class="analysis-title">
+            <h2>Yeni Okul Alanı Analizi</h2>
+            <p>Seçilen bölgenin deprem riskini, kapasite potansiyelini ve çevre imkanlarını hesaplayın.</p>
+          </div>
+          <div class="analysis-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label>İlçe Seçin</label>
+                <select id="analysisIlce">
+                  <option value="EFELER">Efeler (Merkez)</option>
+                  <option value="NAZİLLİ">Nazilli</option>
+                  <option value="SÖKE">Söke</option>
+                  <option value="KUŞADASI">Kuşadası</option>
+                  <option value="DİDİM">Didim</option>
+                  <option value="ÇİNE">Çine</option>
+                  <option value="GERMENCİK">Germencik</option>
+                  <option value="BOZDOĞAN">Bozdoğan</option>
+                  <option value="İNCİRLİOVA">İncirliova</option>
+                  <option value="KOÇARLI">Koçarlı</option>
+                  <option value="KÖŞK">Köşk</option>
+                  <option value="KUYUCAK">Kuyucak</option>
+                  <option value="SULTANHİSAR">Sultanhisar</option>
+                  <option value="KARACASU">Karacasu</option>
+                  <option value="BUHARKENT">Buharkent</option>
+                  <option value="YENİPAZAR">Yenipazar</option>
+                  <option value="KARPUZLU">Karpuzlu</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Arsa Alanı (m²)</label>
+                <input type="number" id="analysisAreaSize" placeholder="Örn: 5000" min="500">
+              </div>
+              <div class="form-group">
+                <label>Kat Sayısı</label>
+                <input type="number" id="analysisFloors" value="3" min="1" max="5">
+              </div>
+              <button class="analyze-btn" onclick="runAnalysis()">Analiz Et</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="analysis-map-container">
+          <div id="map"></div>
+          <div class="map-hint">💡 Haritadaki işaretçilere tıklayarak boş arazileri otomatik seçebilirsiniz.</div>
+        </div>
+
+        <div id="analysisResults" class="analysis-results-container hidden">
+          <div class="analysis-placeholder">
+            Analiz sonuçlarını görmek için yukarıdaki bilgileri doldurup butona basın.
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== EMERGENCY AREA ===== -->
+      <div class="emergency-area" id="emergencyArea">
+        <div class="emergency-header">
+          <h2>🛡️ Sivil Savunma &amp; Acil Durum Planı</h2>
+          <p>Seçilen ilçenin savaş ve afet hazırlık durumunu, sığınak konumlarını ve ikaz sistemlerini analiz edin.</p>
+          <div class="emergency-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label>İlçe Seçin</label>
+                <select id="emergencyIlce">
+                  <option value="EFELER">Efeler (Merkez)</option>
+                  <option value="NAZİLLİ">Nazilli</option>
+                  <option value="SÖKE">Söke</option>
+                  <option value="KUŞADASI">Kuşadası</option>
+                  <option value="DİDİM">Didim</option>
+                  <option value="ÇİNE">Çine</option>
+                  <option value="GERMENCİK">Germencik</option>
+                  <option value="BOZDOĞAN">Bozdoğan</option>
+                  <option value="İNCİRLİOVA">İncirliova</option>
+                  <option value="KOÇARLI">Koçarlı</option>
+                  <option value="KÖŞK">Köşk</option>
+                  <option value="KUYUCAK">Kuyucak</option>
+                  <option value="SULTANHİSAR">Sultanhisar</option>
+                  <option value="KARACASU">Karacasu</option>
+                  <option value="BUHARKENT">Buharkent</option>
+                  <option value="YENİPAZAR">Yenipazar</option>
+                  <option value="KARPUZLU">Karpuzlu</option>
+                </select>
+              </div>
+              <button class="emergency-btn" onclick="runEmergencyAnalysis()">🛡️ Analiz Et</button>
+            </div>
+          </div>
+        </div>
+        <div id="emergencyResults">
+          <div class="analysis-placeholder" style="border-color:rgba(239,68,68,0.2);color:#f87171">
+            🛡️ İlçe seçerek sivil savunma analizini başlatın.
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== VIDEO AREA ===== -->
+      <div class="video-area" id="videoArea">
+        <div class="video-header">
+          <h2>🎬 Acil Durum Eğitim Animasyonları</h2>
+          <p>Savaş/hava saldırısı ve deprem senaryoları için eğitici animasyonlar — İlkokul, ortaokul ve lise seviyesine uyarlanmış.</p>
+          <div class="anim-selectors">
+            <div class="anim-select-group">
+              <label>Senaryo</label>
+              <select id="animScenario">
+                <option value="war">🔴 Savaş / Hava Saldırısı</option>
+                <option value="earthquake">🟡 Deprem</option>
+              </select>
+            </div>
+            <div class="anim-select-group">
+              <label>Seviye</label>
+              <select id="animLevel">
+                <option value="primary">🏫 İlkokul (1-4. Sınıf)</option>
+                <option value="middle">🏛️ Ortaokul (5-8. Sınıf)</option>
+                <option value="high">🎓 Lise (9-12. Sınıf)</option>
+              </select>
+            </div>
+            <button class="anim-start-btn" onclick="startAnimation()">▶ Animasyonu Başlat</button>
+          </div>
+        </div>
+        <div class="canvas-player">
+          <canvas id="animCanvas" height="420"></canvas>
+          <div class="player-controls">
+            <button class="ctrl-btn" onclick="animPrev()">⏮ Önceki</button>
+            <button class="ctrl-btn" id="pauseBtn" onclick="animTogglePause()">⏸ Duraklat</button>
+            <button class="ctrl-btn" onclick="animNext()">Sonraki ⏭</button>
+            <button class="ctrl-btn danger" onclick="animStop()">⏹ Durdur</button>
+            <span class="scene-counter" id="sceneCounter">Sahne: — / —</span>
+          </div>
+        </div>
+        <div class="scenario-cards">
+          <div class="sc-card war">
+            <div class="sc-card-title">🔴 Savaş / Hava Saldırısı Senaryosu</div>
+            <div class="sc-card-desc">İkaz sireninden sığınağa, karartmadan veli koordinasyonuna kadar 9 adımlı animasyon.</div>
+            <div class="sc-card-levels">
+              <span class="sc-level-badge" onclick="quickStart('war','primary')">İlkokul</span>
+              <span class="sc-level-badge" onclick="quickStart('war','middle')">Ortaokul</span>
+              <span class="sc-level-badge" onclick="quickStart('war','high')">Lise</span>
+            </div>
+          </div>
+          <div class="sc-card quake">
+            <div class="sc-card-title">🟡 Deprem Senaryosu</div>
+            <div class="sc-card-desc">Çök-Kapan-Tutun'dan artçı sarsıntı protokolüne, enkaz altı tekniklerine kadar 9 adımlı animasyon.</div>
+            <div class="sc-card-levels">
+              <span class="sc-level-badge" onclick="quickStart('earthquake','primary')">İlkokul</span>
+              <span class="sc-level-badge" onclick="quickStart('earthquake','middle')">Ortaokul</span>
+              <span class="sc-level-badge" onclick="quickStart('earthquake','high')">Lise</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== STUDENT QUERY AREA ===== -->
+      <div class="studentquery-area" id="studentqueryArea">
+        <div class="module-header">
+          <div>
+            <h2>🎓 Okul Sorgulama Sistemi</h2>
+            <p>Doğal dil ile sorgulayın — Gemini AI kriterleri otomatik analiz eder ve eşleşen okulları listeler.</p>
+          </div>
+        </div>
+
+        <!-- SORGU ALANI -->
+        <div class="sq-search-box">
+          <div class="sq-search-wrap">
+            <div class="sq-search-icon">🔍</div>
+            <input
+              id="sqInput"
+              type="text"
+              class="sq-search-input"
+              placeholder="Örn: en fazla öğrencisi olan 5 ilkokul | Nazilli'de köyde olan okullar | 500'den fazla öğrencisi olan ortaokullar"
+              autocomplete="off"
+              maxlength="500"
+            />
+            <button id="sqSearchBtn" class="sq-search-btn" onclick="sqSubmitQuery()">Sorgula</button>
+          </div>
+          <div class="sq-search-hint">AI destekli sorgulama — istediğiniz kriterleri Türkçe yazın, sistem otomatik analiz eder.</div>
+        </div>
+
+        <!-- ÖRNEK SORGULAR PANELİ -->
+        <div class="sq-examples-panel" id="sqExamplesPanel">
+          <div class="sq-examples-header" onclick="sqToggleExamples()">
+            <span>💡 Örnek Sorgular</span>
+            <span id="sqExamplesArrow">▾</span>
+          </div>
+          <div class="sq-examples-body" id="sqExamplesBody">
+            <div class="sq-examples-group">
+              <div class="sq-examples-group-title">📊 Sıralama</div>
+              <div class="sq-example-chips">
+                <span class="sq-example-chip" onclick="sqUseExample(this)">en fazla öğrencisi olan 5 ilkokul</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">en az devamsızlığı olan 10 okul</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">en çok öğretmeni olan lise</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">en fazla lisanslı sporcusu olan 3 ortaokul</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">en az yabancı uyruklusu olan 5 okul</span>
+              </div>
+            </div>
+            <div class="sq-examples-group">
+              <div class="sq-examples-group-title">🔢 Sayısal Filtre</div>
+              <div class="sq-example-chips">
+                <span class="sq-example-chip" onclick="sqUseExample(this)">500'den fazla öğrencisi olan ortaokullar</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">öğrenci sayısı 100 ile 300 arasında olan okullar</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">30'dan az öğretmeni olan ilkokullar</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">en fazla 50 öğrencisi olan anaokulu</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">10'dan fazla dersliği olan ortaokullar</span>
+              </div>
+            </div>
+            <div class="sq-examples-group">
+              <div class="sq-examples-group-title">📍 Konum & Altyapı</div>
+              <div class="sq-example-chips">
+                <span class="sq-example-chip" onclick="sqUseExample(this)">Nazilli'de köyde olan ilkokullar</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">ilçe merkezine 20 km'den uzak okullar</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">ikili öğretim yapan ortaokullar</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">kömürle ısınan okullar</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">konferans salonu olan okullar</span>
+              </div>
+            </div>
+            <div class="sq-examples-group">
+              <div class="sq-examples-group-title">🎓 Eğitim Aktiviteleri</div>
+              <div class="sq-example-chips">
+                <span class="sq-example-chip" onclick="sqUseExample(this)">Efeler'de DYK kursu açılan ortaokullar</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">yaz okulu açılan ilkokullar</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">atölyesi olan liseler</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">özel eğitim sınıfı olan okullar</span>
+                <span class="sq-example-chip" onclick="sqUseExample(this)">kardeş okulu olan Söke okulları</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SORGU GEÇMİŞİ -->
+        <div class="sq-history-bar" id="sqHistoryBar" style="display:none">
+          <span class="sq-history-label">🕐 Son Sorgular:</span>
+          <div class="sq-history-chips" id="sqHistoryChips"></div>
+          <button class="sq-history-clear" onclick="sqClearHistory()">Geçmişi Temizle</button>
+        </div>
+
+        <!-- SORGU GERİ BİLDİRİMİ -->
+        <div class="sq-interpretation" id="sqInterpretation" style="display:none"></div>
+
+        <!-- HIZLI FİLTRELER -->
+        <div class="sq-quick-area">
+          <span class="sq-quick-label">Hızlı:</span>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('yabanci_uyruklu_var',true)">🌍 Yabancı Uyruklu</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('lisansli_sporcu_var',true)">🏅 Lisanslı Sporcu</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('tasimali_aktif',true)">🚌 Taşımalı</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('engelli_rampasi',true)">♿ Engelli Rampası</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('kutuphane_var',true)">📖 Kütüphanesi Var</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('odul_var',true)">🏆 Ödüllü</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('uluslararasi_proje_var',true)">🌐 Uluslararası Proje</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('risk_analizi_yapildi',true)">⚠️ Risk Analizi</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('dyk_kursu_var',true)">📚 DYK Kursu</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('kantin_var',true)">🍽️ Kantinli</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('kardes_okul_var',true)">🌐 Kardeş Okul</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('ozel_egitim_sinif_min',1)">♾️ Özel Eğitim</button>
+          <button class="sq-quick-chip" onclick="sqQuickFilter('konum_turu','Köy')">🏡 Köy Okulu</button>
+          <button class="sq-quick-chip sq-quick-clear" onclick="sqClearAll()">✕ Temizle</button>
+        </div>
+
+        <!-- AKTİF FİLTRE CHİPLERİ -->
+        <div class="sq-chips-wrap">
+          <div id="sqChipsArea" class="sq-chips-area"></div>
+        </div>
+
+        <!-- HARİTA GÖRÜNÜMÜ -->
+        <div id="sqMapContainer" style="display:none; height:400px; margin-bottom:20px; border-radius:var(--radius); border:1px solid var(--border); overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.1);"></div>
+
+        <!-- SONUÇLAR -->
+        <div id="sqResultsArea" class="sq-results-area"></div>
+      </div>
+
+      <!-- DETAY MODALİ -->
+      <div id="sqDetailModal" class="sq-modal" onclick="sqCloseDetail()">
+        <div class="sq-modal-inner" onclick="event.stopPropagation()">
+          <button class="sq-modal-close" onclick="sqCloseDetail()">✕ Kapat</button>
+          <div id="sqDetailContent" class="sq-modal-body"></div>
+        </div>
+      </div>
+
+      <!-- Input Area (only visible in chat tab) -->
+      <div class="input-area">
+        <div class="input-wrapper">
+          <input
+            type="text"
+            id="userInput"
+            placeholder="Soru sorun... örn: 'Efeler ile Nazilli karşılaştır'"
+            autocomplete="off"
+            maxlength="500"
+            spellcheck="false"
+          />
+          <button id="sendBtn" onclick="handleSend()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+        <div class="input-hint">Enter'a basarak veya butona tıklayarak gönderin</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="meb_data_REAL_FINAL.js"></script>
+  <script src="emergency_data.js"></script>
+  <script src="animations.js"></script>
+  <script src="ai_module.js"></script>
+  <script src="heatmap_module.js"></script>
+  <script src="comparison_module.js"></script>
+  <script src="exam_module.js"></script>
+  <script src="student_data_demo.js"></script>
+  <script src="student_query_module.js"></script>
+  <script src="loader_module.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
